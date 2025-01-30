@@ -1,0 +1,53 @@
+
+import os
+import subprocess
+import paramiko
+from flask import Flask, request, jsonify
+
+# Configuration
+SSH_PORT = 2222  # Custom SSH Port
+API_KEY = "your_secure_api_key"  # Change this to a strong key
+LOG_FILE = "/var/log/remote_shell.log"
+
+app = Flask(__name__)
+
+# Function to execute shell commands
+def execute_command(cmd):
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        log_command(cmd, result.stdout)
+        return result.stdout if result.stdout else result.stderr
+    except Exception as e:
+        return str(e)
+
+# Function to log executed commands
+def log_command(cmd, output):
+    with open(LOG_FILE, "a") as log:
+        log.write(f"[COMMAND] {cmd}\n[OUTPUT] {output}\n\n")
+
+# SSH Server Function (if you want a custom SSH access)
+def start_ssh_server():
+    server = paramiko.ServerInterface()
+    server.allow_none_auth = True
+    sshd = paramiko.Transport(("0.0.0.0", SSH_PORT))
+    sshd.add_server_key(paramiko.RSAKey.generate(2048))
+    sshd.start_server(server=server)
+    print(f"SSH Server started on port {SSH_PORT}")
+
+# Flask API Route for Remote Command Execution
+@app.route("/execute", methods=["POST"])
+def execute():
+    if request.json.get("api_key") != API_KEY:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    command = request.json.get("command")
+    if not command:
+        return jsonify({"error": "No command provided"}), 400
+
+    output = execute_command(command)
+    return jsonify({"command": command, "output": output})
+
+# Run Flask API
+if __name__ == "__main__":
+    print("[+] Remote Shell API is running...")
+    app.run(host="0.0.0.0", port=5000)
